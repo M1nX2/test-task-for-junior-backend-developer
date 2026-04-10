@@ -31,6 +31,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*taskdomain.Ta
 		Title:       normalized.Title,
 		Description: normalized.Description,
 		Status:      normalized.Status,
+		Recurrence:  normalized.Recurrence,
 	}
 	now := s.now()
 	model.CreatedAt = now
@@ -67,6 +68,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateInput) (*tas
 		Title:       normalized.Title,
 		Description: normalized.Description,
 		Status:      normalized.Status,
+		Recurrence:  normalized.Recurrence,
 		UpdatedAt:   s.now(),
 	}
 
@@ -90,6 +92,23 @@ func (s *Service) List(ctx context.Context) ([]taskdomain.Task, error) {
 	return s.repo.List(ctx)
 }
 
+func (s *Service) ListForDate(ctx context.Context, date time.Time) ([]taskdomain.Task, error) {
+	tasks, err := s.repo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	target := date.UTC()
+	result := make([]taskdomain.Task, 0, len(tasks))
+	for i := range tasks {
+		if matchesDate(tasks[i], target) {
+			result = append(result, tasks[i])
+		}
+	}
+
+	return result, nil
+}
+
 func validateCreateInput(input CreateInput) (CreateInput, error) {
 	input.Title = strings.TrimSpace(input.Title)
 	input.Description = strings.TrimSpace(input.Description)
@@ -106,6 +125,12 @@ func validateCreateInput(input CreateInput) (CreateInput, error) {
 		return CreateInput{}, fmt.Errorf("%w: invalid status", ErrInvalidInput)
 	}
 
+	normalizedRecurrence, err := validateRecurrence(input.Recurrence)
+	if err != nil {
+		return CreateInput{}, err
+	}
+	input.Recurrence = normalizedRecurrence
+
 	return input, nil
 }
 
@@ -120,6 +145,12 @@ func validateUpdateInput(input UpdateInput) (UpdateInput, error) {
 	if !input.Status.Valid() {
 		return UpdateInput{}, fmt.Errorf("%w: invalid status", ErrInvalidInput)
 	}
+
+	normalizedRecurrence, err := validateRecurrence(input.Recurrence)
+	if err != nil {
+		return UpdateInput{}, err
+	}
+	input.Recurrence = normalizedRecurrence
 
 	return input, nil
 }

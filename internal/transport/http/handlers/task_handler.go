@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gorilla/mux"
 
@@ -31,6 +32,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Title:       req.Title,
 		Description: req.Description,
 		Status:      req.Status,
+		Recurrence:  req.Recurrence.toDomain(),
 	})
 	if err != nil {
 		writeUsecaseError(w, err)
@@ -73,6 +75,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Title:       req.Title,
 		Description: req.Description,
 		Status:      req.Status,
+		Recurrence:  req.Recurrence.toDomain(),
 	})
 	if err != nil {
 		writeUsecaseError(w, err)
@@ -99,6 +102,33 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 	tasks, err := h.usecase.List(r.Context())
+	if err != nil {
+		writeUsecaseError(w, err)
+		return
+	}
+
+	response := make([]taskDTO, 0, len(tasks))
+	for i := range tasks {
+		response = append(response, newTaskDTO(&tasks[i]))
+	}
+
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (h *TaskHandler) ListForDate(w http.ResponseWriter, r *http.Request) {
+	rawDate := r.URL.Query().Get("date")
+	if rawDate == "" {
+		writeError(w, http.StatusBadRequest, errors.New("date query parameter is required"))
+		return
+	}
+
+	targetDate, err := time.Parse("2006-01-02", rawDate)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errors.New("invalid date format, expected YYYY-MM-DD"))
+		return
+	}
+
+	tasks, err := h.usecase.ListForDate(r.Context(), targetDate)
 	if err != nil {
 		writeUsecaseError(w, err)
 		return
